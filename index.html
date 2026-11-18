@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Be the Bookie 莊家模擬器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,500;0,6..96,700;1,6..96,500;1,6..96,700&family=Jost:wght@400;500;600&family=Noto+Serif+TC:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --lacquer:#0E1512; --baize:#153B2E; --gold:#D8BE8A; --gold-hi:#F1E2B4; --gold-lo:#9C7C3C;
+  --ivory:#F3ECDD; --muted:#B4AC98; --red:#B3262E; --red-hi:#E0626B; --jade:#2E9E6B; --jade-hi:#5CC796;
+  --ink:#1B1A16;
+  --display:"Bodoni Moda","Noto Serif TC",Georgia,serif;
+  --serif:"Noto Serif TC","Bodoni Moda",Georgia,serif;
+  --sans:"Jost","Noto Sans TC",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:var(--sans); color:var(--ivory); min-height:100vh; line-height:1.55;
+  background:
+    radial-gradient(ellipse 90% 60% at 50% -5%, rgba(216,190,138,.14), transparent 60%),
+    radial-gradient(ellipse 120% 80% at 50% 110%, #0a2a1f 0%, transparent 65%),
+    var(--lacquer);
+  background-attachment:fixed;
+}
+body::before{ /* felt grain */
+  content:"";position:fixed;inset:0;pointer-events:none;opacity:.07;mix-blend-mode:screen;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+.page{position:relative;max-width:1080px;margin:0 auto;padding:18px 18px 56px}
+:focus-visible{outline:2px solid var(--gold-hi);outline-offset:3px}
+button{font-family:inherit}
+
+/* ---------- Masthead ---------- */
+.mast{text-align:center;padding:4px 0 6px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.course{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-weight:700;font-size:14px;letter-spacing:.08em;color:var(--gold-hi);text-align:left}
+.course svg{flex:none;width:22px;height:22px}
+.lang{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.lang button{white-space:nowrap;background:none;border:0;color:var(--muted);cursor:pointer;padding:6px 4px;font-size:13px;letter-spacing:.06em}
+.lang button.on{color:var(--gold-hi);border-bottom:1px solid var(--gold)}
+.title{margin:10px 0 0;font-family:var(--display);font-style:italic;font-weight:700;
+  font-size:clamp(46px,11vw,92px);line-height:1;letter-spacing:-.01em;
+  background:linear-gradient(180deg,var(--gold-hi) 5%,var(--gold) 50%,var(--gold-lo) 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;padding:0 .08em .06em}
+.rule{display:flex;align-items:center;justify-content:center;gap:14px;margin:14px auto 12px;max-width:420px}
+.rule::before,.rule::after{content:"";height:1px;flex:1;background:linear-gradient(90deg,transparent,var(--gold));
+  transform-origin:center;animation:draw 1.1s cubic-bezier(.2,.7,.2,1) both}
+.rule::after{background:linear-gradient(270deg,transparent,var(--gold))}
+.rule i{width:8px;height:8px;background:var(--gold);transform:rotate(45deg);flex:none}
+@keyframes draw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.subtitle{margin:0;font-family:var(--serif);font-weight:500;font-size:clamp(15px,3.6vw,18px);letter-spacing:.28em;color:var(--ivory);opacity:.92}
+
+/* ---------- Ledger strip ---------- */
+html[lang=en] .subtitle{letter-spacing:.08em}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);margin:22px 0 26px;border-top:1px solid rgba(216,190,138,.45);border-bottom:1px solid rgba(216,190,138,.45)}
+.strip>div{padding:12px 8px;text-align:center}
+.strip>div+div{border-left:1px solid rgba(216,190,138,.25)}
+.strip .k{font-size:13px;color:var(--muted)}
+.strip .v{font-family:var(--display);font-weight:700;font-size:clamp(24px,6vw,34px);line-height:1.15;color:var(--gold-hi);font-variant-numeric:lining-nums}
+.strip .v.pos{color:var(--jade-hi)}
+
+/* ---------- Layout ---------- */
+.table{display:grid;gap:30px;grid-template-areas:"a" "b" "spin"}
+.col-a{grid-area:a}.col-b{grid-area:b}.spin{grid-area:spin}
+@media(min-width:960px){
+  .table{grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:30px 48px;grid-template-rows:auto 1fr;grid-template-areas:"a b" "spin b";align-items:start}
+}
+.sec+.sec{margin-top:30px;padding-top:26px;border-top:1px solid rgba(216,190,138,.25)}
+.sec h2{display:flex;align-items:center;gap:12px;margin:0 0 6px;font-family:var(--serif);font-weight:700;font-size:20px;color:var(--ivory)}
+.num{flex:none;width:30px;height:30px;border:1px solid var(--gold);border-radius:50%;display:grid;place-items:center;
+  font-family:var(--display);font-weight:700;font-size:16px;color:var(--gold-hi)}
+.hint{margin:0 0 14px 42px;font-size:14px;color:var(--muted)}
+
+/* ---------- Step 1: split ---------- */
+.counts{display:flex;justify-content:space-between;align-items:flex-end;margin:8px 0 4px}
+.count .n{font-family:var(--display);font-weight:700;font-size:clamp(40px,9vw,56px);line-height:1}
+.count .l{font-size:14px;display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.count.red .n,.count.red .l .dot{color:var(--red-hi)}
+.count.jade{text-align:right}.count.jade .l{justify-content:flex-end}
+.count.jade .n,.count.jade .l .dot{color:var(--jade-hi)}
+.count .m{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.count .n small{font-family:var(--serif);font-size:.38em;font-weight:500;margin-left:4px;color:var(--muted)}
+.dot{font-size:15px}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:34px;background:transparent;margin:8px 0;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--track)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--track)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;margin-top:-12px;border-radius:50%;border:2px solid var(--gold-hi);
+  background:radial-gradient(circle,var(--ivory) 0 34%,transparent 36%),repeating-conic-gradient(var(--gold) 0 22.5deg,#1b2a22 22.5deg 45deg);
+  box-shadow:0 3px 10px rgba(0,0,0,.6)}
+input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;border:2px solid var(--gold-hi);
+  background:radial-gradient(circle,var(--ivory) 0 34%,transparent 36%),repeating-conic-gradient(var(--gold) 0 22.5deg,#1b2a22 22.5deg 45deg);
+  box-shadow:0 3px 10px rgba(0,0,0,.6)}
+#split{--track:linear-gradient(90deg,var(--red) 0 var(--p,50%),var(--jade) var(--p,50%) 100%)}
+#greed{--track:linear-gradient(90deg,#EFE6CB,var(--gold) 42%,#8C1D26 78%,#2B0508)}
+
+.crowd{display:grid;grid-template-columns:repeat(20,1fr);gap:4px;margin-top:10px}
+.crowd i{aspect-ratio:1;border-radius:50%;box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.35)}
+.crowd .pr{background:var(--red)}.crowd .pg{background:var(--jade)}
+
+/* ---------- Step 2: take ---------- */
+.ends{display:flex;justify-content:space-between;font-family:var(--serif);font-weight:700;font-size:15px;color:var(--gold)}
+.take{margin-top:4px;text-align:center}
+.take .lbl{font-family:var(--serif);font-weight:900;font-size:24px;color:var(--gold-hi)}
+.take .amt{font-size:15px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ---------- Step 3: tote board (the memorable element) ---------- */
+.board{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:10px 0 22px}
+.plaque{position:relative;padding:18px 10px 16px;text-align:center;color:var(--ivory);border:1px solid var(--gold)}
+.plaque::after{content:"";position:absolute;inset:5px;border:1px solid rgba(216,190,138,.55);pointer-events:none}
+.plaque.r{background:radial-gradient(ellipse at 50% 0%,#7d1a22 0%,#4a0b12 70%,#2a0509 100%)}
+.plaque.g{background:radial-gradient(ellipse at 50% 0%,#17694a 0%,#0c3f2c 70%,#06241a 100%)}
+.pl-head{display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--serif);font-weight:700;font-size:16px;color:var(--gold-hi)}
+.suit{font-size:18px}
+.odds{font-family:var(--display);font-weight:700;font-size:clamp(54px,10vw,92px);line-height:1.02;margin:8px 0 4px;
+  font-variant-numeric:lining-nums;
+  background:linear-gradient(180deg,#fff7de,var(--gold-hi) 40%,var(--gold) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.odds.tick{animation:tick .28s ease-out}
+@keyframes tick{from{opacity:.35;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.eg{font-size:13px;color:var(--ivory);opacity:.85;padding:0 4px}
+
+/* ---------- Ledger paper (calculation) ---------- */
+.paper-title{margin:0 0 10px;font-family:var(--serif);font-weight:700;font-size:18px;color:var(--gold-hi)}
+.paper{background:linear-gradient(180deg,#F6F0DF,#ECE2CA);color:var(--ink);padding:6px 18px 10px;border:1px solid #BFA46B;
+  box-shadow:inset 0 1px 0 #fff,0 18px 40px rgba(0,0,0,.45)}
+.cs{padding:14px 0}
+.cs+.cs{border-top:1px dashed #B5A478}
+.ct{font-family:var(--serif);font-weight:700;font-size:16px}
+.cf{font-family:var(--display);font-style:italic;font-weight:500;font-size:15px;color:#5B4A1E;margin:3px 0 8px}
+.cn{font-size:16px;padding:2px 0;font-variant-numeric:tabular-nums;font-weight:500}
+.cn b{font-family:var(--display);font-size:20px;font-weight:700}
+.cn.r b{color:#9E1B24}.cn.g b{color:#1F7A4F}.cn.ok b{color:#7A5C10}
+.cn .tag{display:inline-block;min-width:3.2em;margin-right:.7em;font-family:var(--serif);font-weight:700;font-size:14px}
+.cp{font-size:13px;color:#5d5748;margin-top:6px;line-height:1.5}
+
+/* ---------- Spin button ---------- */
+.spin{display:block;width:100%;padding:18px 16px;border:0;cursor:pointer;position:relative;
+  font-family:var(--serif);font-weight:900;font-size:21px;letter-spacing:.12em;color:#1A1308;
+  background:linear-gradient(180deg,#F1E2B4,#D8BE8A 55%,#A8863F);box-shadow:0 10px 26px rgba(0,0,0,.5)}
+.spin::after{content:"";position:absolute;inset:4px;border:1px solid rgba(26,19,8,.45);pointer-events:none}
+.spin:hover{filter:brightness(1.06)}
+.spin:active{transform:translateY(2px)}
+
+/* ---------- Modals ---------- */
+.modal{position:fixed;inset:0;background:rgba(4,8,6,.84);display:none;align-items:center;justify-content:center;padding:22px;z-index:10}
+.modal.show{display:flex}
+.mbox{position:relative;width:100%;max-width:470px;max-height:92vh;overflow:auto;background:linear-gradient(180deg,#14201a,#0b110e);
+  border:1px solid var(--gold);padding:28px 22px 22px;text-align:center;box-shadow:0 0 0 6px #0b110e,0 0 0 7px rgba(216,190,138,.6),0 30px 60px rgba(0,0,0,.6)}
+.mbox h3{font-family:var(--serif);font-weight:900;color:var(--gold-hi);margin:8px 0 12px;font-size:26px}
+.mbox p{line-height:1.7;margin:10px 0;color:var(--ivory)}
+.mbox ul{text-align:left;line-height:1.9;padding-left:20px;margin:10px 0;color:var(--ivory)}
+.medal{width:78px;height:78px;margin:0 auto;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--display);font-size:38px;color:#1A1308;
+  background:radial-gradient(circle at 35% 30%,var(--gold-hi),var(--gold) 55%,var(--gold-lo));
+  box-shadow:0 0 0 3px #0b110e,0 0 0 4px var(--gold)}
+.mbox .spin{margin-top:16px;padding:15px}
+
+.stage{perspective:800px;height:150px;display:grid;place-items:center;margin:0 0 8px}
+.coin{width:122px;height:122px;position:relative;transform-style:preserve-3d;transition:transform 2.2s cubic-bezier(.2,.7,.2,1)}
+.coin-face{position:absolute;inset:0;border-radius:50%;backface-visibility:hidden;display:grid;place-items:center;
+  font-family:var(--display);font-size:54px;border:3px solid var(--gold-hi);box-shadow:inset 0 0 0 7px rgba(0,0,0,.18),inset 0 0 0 8px rgba(255,255,255,.45)}
+.coin-face.red{background:radial-gradient(circle at 35% 30%,#d4505a,var(--red) 55%,#5a0b12);color:var(--gold-hi)}
+.coin-face.green{background:radial-gradient(circle at 35% 30%,#58c593,var(--jade) 55%,#0c4a31);transform:rotateY(180deg);color:var(--gold-hi)}
+.winner{font-family:var(--serif);font-weight:900;font-size:28px;margin:4px 0 10px}
+.ledger{padding:6px 2px;text-align:left;font-size:15px;border-top:1px solid rgba(216,190,138,.4);border-bottom:1px solid rgba(216,190,138,.4)}
+.ledger .row{display:flex;justify-content:space-between;gap:12px;padding:6px 0;font-variant-numeric:tabular-nums}
+.ledger .row.tot{border-top:1px solid rgba(216,190,138,.4);margin-top:2px;font-weight:600;color:var(--jade-hi)}
+.callout{margin:14px 0;padding:12px 14px;border-left:2px solid var(--gold);background:rgba(216,190,138,.09);color:var(--gold-hi);text-align:left;font-size:15px;line-height:1.7}
+.react{margin:10px 0;font-size:15px;color:var(--ivory);opacity:.92}
+.verdict{font-family:var(--serif);font-weight:900;font-size:28px;color:var(--gold-hi);margin:12px 0 4px}
+.hist{font-size:13px;width:100%;border-collapse:collapse;margin-top:12px;font-variant-numeric:tabular-nums}
+.hist td,.hist th{padding:5px 4px;border-bottom:1px solid rgba(216,190,138,.2)}
+.hist th{color:var(--gold);font-weight:500}
+.hide{display:none!important}
+
+.chip{position:fixed;top:-40px;width:26px;height:26px;border-radius:50%;z-index:20;pointer-events:none;
+  background:radial-gradient(circle,var(--ivory) 0 30%,transparent 32%),repeating-conic-gradient(var(--ivory) 0 18deg,var(--c) 18deg 36deg);
+  border:3px solid var(--c);animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
+
+@media(prefers-reduced-motion:reduce){
+  .rule::before,.rule::after,.odds.tick,.chip{animation:none}
+  .coin{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="mast">
+    <div class="topbar">
+      <div class="course">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#D8BE8A" stroke-width="1.6" aria-hidden="true"><path d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z"/><circle cx="12" cy="12" r="3.2"/></svg>
+        <span data-i="course"></span>
+      </div>
+      <div class="lang" role="group" aria-label="Language">
+        <button data-l="zh" class="on">中文</button><span aria-hidden="true">/</span><button data-l="en">English</button>
+      </div>
+    </div>
+    <h1 class="title">Be the Bookie</h1>
+    <div class="rule" aria-hidden="true"><i></i></div>
+    <p class="subtitle" data-i="subtitle"></p>
+  </header>
+
+  <div class="strip">
+    <div><div class="k" data-i="round"></div><div class="v" id="sRound">1/10</div></div>
+    <div><div class="k" data-i="customers"></div><div class="v" id="sCust">100</div></div>
+    <div><div class="k" data-i="bank"></div><div class="v pos" id="sBank">$0</div></div>
+  </div>
+
+  <main class="table">
+    <div class="col-a">
+      <section class="sec">
+        <h2><span class="num">1</span><span data-i="s1"></span></h2>
+        <p class="hint" id="h1"></p>
+        <div class="counts">
+          <div class="count red"><div class="l"><span class="dot">♥&#xFE0E;</span><span data-i="red"></span></div><div class="n" id="rN">50</div><div class="m" id="rB"></div></div>
+          <div class="count jade"><div class="l"><span data-i="green"></span><span class="dot">♣&#xFE0E;</span></div><div class="n" id="gN">50</div><div class="m" id="gB"></div></div>
+        </div>
+        <input type="range" id="split" min="1" max="99" value="50" aria-label="Customers on red">
+        <div class="crowd" id="people" aria-hidden="true"></div>
+      </section>
+
+      <section class="sec">
+        <h2><span class="num">2</span><span data-i="s2"></span></h2>
+        <p class="hint" data-i="h2"></p>
+        <div class="ends"><span data-i="saint"></span><span data-i="evil"></span></div>
+        <input type="range" id="greed" min="0" max="5000" step="10" value="500" aria-label="House take">
+        <div class="take"><div class="lbl" id="mLbl"></div><div class="amt" id="mTake"></div></div>
+      </section>
+    </div>
+
+    <div class="col-b">
+      <section class="sec">
+        <h2><span class="num">3</span><span data-i="s3"></span></h2>
+        <div class="board">
+          <div class="plaque r"><div class="pl-head"><span class="suit">♥&#xFE0E;</span><span data-i="redOdds"></span></div><div class="odds" id="oR">1.90</div><div class="eg" id="eR"></div></div>
+          <div class="plaque g"><div class="pl-head"><span class="suit">♣&#xFE0E;</span><span data-i="greenOdds"></span></div><div class="odds" id="oG">1.90</div><div class="eg" id="eG"></div></div>
+        </div>
+        <h3 class="paper-title" data-i="calcT"></h3>
+        <div class="paper" id="calc"></div>
+      </section>
+    </div>
+
+    <button class="spin" id="spin"></button>
+  </main>
+</div>
+
+<div class="modal show" id="mIntro" role="dialog" aria-modal="true"><div class="mbox">
+  <div class="medal">♠&#xFE0E;</div>
+  <h3 data-i="introT"></h3>
+  <div id="introBody"></div>
+  <button class="spin" id="start" data-i="startBtn"></button>
+</div></div>
+
+<div class="modal" id="mRes" role="dialog" aria-modal="true"><div class="mbox">
+  <div class="stage"><div class="coin" id="coin"><div class="coin-face red">♥&#xFE0E;</div><div class="coin-face green">♣&#xFE0E;</div></div></div>
+  <div id="resBody" class="hide"></div>
+</div></div>
+
+<div class="modal" id="mFin" role="dialog" aria-modal="true"><div class="mbox" id="finBody"></div></div>
+
+<script>
+const BET=100, ROUNDS=10, START=100, CAP=150;
+const I18N={
+ zh:{course:"輔仁大學 FMGB 全英課",subtitle:"莊家模擬器　你來開賠率",round:"局數",customers:"客人",bank:"莊家累積獲利",
+  s1:"這一局客人怎麼押？",h1:"共 {n} 位客人，每人押 ${b}，總投注 ${t}。拖動滑桿，決定幾人押紅、幾人押綠。",
+  red:"押紅色",green:"押綠色",
+  s2:"你想抽多少？",h2:"從總投注中，這一局你想留下多少？",saint:"佛心",evil:"黑心",
+  take:"莊家抽 ${p}，佔總投注 {m}%",
+  s3:"系統算出的賠率",redOdds:"紅色賠率",greenOdds:"綠色賠率",
+  eg:"押 $100，贏了拿回 ${x}",
+  calcT:"賠率是怎麼算出來的？",
+  c1:"先算：可以分給贏家的錢",c1f:"可分給贏家的錢 = 總投注 − 莊家抽的錢",c1p:"白話：先把莊家的份拿走，剩下的全部分給贏的那一邊。",
+  c2:"再算：每一邊的賠率",c2f:"賠率 = 可分給贏家的錢 ÷ 這一邊的投注額",c2p:"白話：投注的人越多，每人分到越少，賠率就越低。",
+  c3:"驗算：莊家真的穩賺嗎？",c3f:"莊家賺 = 總投注 − 付給贏家的錢（投注額 × 賠率）",
+  pay:"付給贏家",hw:"莊家賺",c3p:"賠率顯示到小數兩位，這裡多算一位，所以用 ≈。不論誰贏，莊家賺的都一樣。",
+  rS:"紅色",gS:"綠色",ifR:"紅色贏",ifG:"綠色贏",
+  spin:"開獎　第 {r} 局",
+  moods:["佛心莊家","很佛心","合理價","有點黑","黑心","超級黑心"],
+  introT:"今晚，你是莊家",
+  introHTML:`<p>100 位客人來賭一枚硬幣：<b style="color:#E0626B">紅</b>還是<b style="color:#5CC796">綠</b>？每人押 $100。</p>
+   <ul><li>決定客人怎麼押</li><li>決定你想抽多少，從佛心到黑心</li><li>看系統算出的賠率，然後開獎</li></ul>
+   <p>共 <b>10 局</b>。太黑心，客人會離開；夠佛心，客人會帶朋友來。<br>目標：10 局後賺得最多。</p>`,
+  startBtn:"開始營業",
+  wins:"{c}獲勝",redW:"紅色",greenW:"綠色",
+  collect:"收進總投注",paid:"賠給贏家",profit:"莊家這局賺",
+  same:"就算是{o}贏，你也一樣賺 ${p}。莊家不用賭輸贏，賺的是中間的差價。",
+  rUp:"客人覺得你很公道，帶了 {d} 位朋友來。",rSame:"價錢合理，客人照常來。",
+  rDown:"抽太多了，{d} 位客人離開。",
+  next:"下一局",final:"看最終結果",
+  finT:"打烊結算",finCust:"最後客人數",finBank:"10 局總獲利",finAvg:"平均抽成",
+  t:{ghost:["♠","客人全跑光","抽太多，客人都不來了。再會賺也沒用。"],
+     saint:["♥","佛心莊家","客人很愛你，但你幾乎沒賺到錢。"],
+     shark:["♦","黑心商人","一開始賺得多，但客人越來越少。"],
+     master:["♛","剛剛好大師","你找到了賺錢又留住客人的平衡點。"],
+     solid:["♣","合格莊家","表現不錯，再試試能不能賺更多。"]},
+  lesson:"莊家賺的是「價差」，不是賭輸贏。這跟銀行外匯報價的買進價和賣出價是同一個道理。",
+  again:"再玩一次",hist:["局","客人","抽成","獲利"],
+  closed:"客人全跑光了，提早打烊。"},
+ en:{course:"Fu Jen FMGB",subtitle:"You set the odds. You run the house.",round:"Round",customers:"Customers",bank:"House profit",
+  s1:"How do customers bet?",h1:"{n} customers, ${b} each, total bets ${t}. Drag to split red and green.",
+  red:"Bet red",green:"Bet green",
+  s2:"How much do you take?",h2:"How much of the total bets do you keep this round?",saint:"Saint",evil:"Greedy",
+  take:"House takes ${p}, {m}% of total bets",
+  s3:"Your odds board",redOdds:"Red odds",greenOdds:"Green odds",
+  eg:"Bet $100, win and get back ${x}",
+  calcT:"How are the odds calculated?",
+  c1:"First: the pool for winners",c1f:"Winners' pool = Total bets − House take",c1p:"In short: the house keeps its share first. The rest goes to whoever wins.",
+  c2:"Then: odds for each side",c2f:"Odds = Winners' pool ÷ Bets on that side",c2p:"In short: more people on a side means less each, so lower odds.",
+  c3:"Check: does the house always win?",c3f:"House earns = Total bets − Payout (bets × odds)",
+  pay:"Pay winners",hw:"House earns",c3p:"Odds are shown to 2 decimals; here we use 3, so we use ≈. Whoever wins, the house earns the same.",
+  rS:"Red",gS:"Green",ifR:"If red wins",ifG:"If green wins",
+  spin:"Spin  Round {r}",
+  moods:["Saint","Very kind","Fair","A bit greedy","Greedy","Very greedy"],
+  introT:"Tonight, you are the house",
+  introHTML:`<p>100 customers bet on a coin: <b style="color:#E0626B">red</b> or <b style="color:#5CC796">green</b>? Each bets $100.</p>
+   <ul><li>Decide how customers bet</li><li>Decide how much you take, from saint to greedy</li><li>See the odds, then spin</li></ul>
+   <p><b>10 rounds</b>. Too greedy and customers leave. Be fair and they bring friends.<br>Goal: earn the most after 10 rounds.</p>`,
+  startBtn:"Open the house",
+  wins:"{c} wins",redW:"Red",greenW:"Green",
+  collect:"Total bets collected",paid:"Paid to winners",profit:"House earns",
+  same:"If {o} had won, you would also earn ${p}. The house doesn't gamble. It earns the gap.",
+  rUp:"Customers like your prices. They brought {d} friends.",rSame:"Fair price. Customers stay.",
+  rDown:"Too greedy. {d} customers walked out.",
+  next:"Next round",final:"See final result",
+  finT:"Closing time",finCust:"Final customers",finBank:"Total profit",finAvg:"Average take",
+  t:{ghost:["♠","Ghost town","So greedy that nobody comes anymore."],
+     saint:["♥","Saint bookie","Customers love you, but you earned almost nothing."],
+     shark:["♦","Greedy shark","Big money at first, then customers ran away."],
+     master:["♛","Sweet-spot master","You balanced profit and happy customers."],
+     solid:["♣","Solid bookie","Nice work. Can you earn even more?"]},
+  lesson:"The house earns the spread, not the bet. A bank's buy and sell prices for currencies work the same way.",
+  again:"Play again",hist:["Rd","Cust.","Take","Profit"],
+  closed:"All customers left. Closing early."}
+};
+let lang="zh", round=1, cust=START, bank=0, hist=[];
+let redN=50, take=500;
+const $=id=>document.getElementById(id);
+const money=n=>"$"+Math.round(n).toLocaleString("en-US");
+const TXT="︎";
+function t(k,v={}){let s=I18N[lang][k];if(typeof s!=="string")return s;
+  return s.replace(/\{(\w+)\}/g,(_,x)=>v[x]!==undefined?v[x]:"");}
+
+function calc(){
+  const T=cust*BET, R=redN*BET, G=(cust-redN)*BET, maxP=Math.min(R,G);
+  if(take>maxP) take=maxP;
+  const pool=T-take;
+  return {T,R,G,maxP,oR:pool/R,oG:pool/G,m:take/T};
+}
+function moodIdx(m){return m<=0?0:m<=.05?1:m<=.10?2:m<=.15?3:m<=.25?4:5}
+const fmt=o=>(Math.floor(o*100+1e-9)/100).toFixed(2);
+function setOdds(id,val){const el=$(id);if(el.textContent!==val){el.textContent=val;el.classList.remove("tick");void el.offsetWidth;el.classList.add("tick");}}
+
+function render(){
+  const c=calc();
+  document.querySelectorAll("[data-i]").forEach(el=>{const v=t(el.dataset.i);if(typeof v==="string")el.textContent=v;});
+  $("sRound").textContent=round+"/"+ROUNDS; $("sCust").textContent=cust; $("sBank").textContent=money(bank);
+  $("h1").textContent=t("h1",{n:cust,b:BET,t:c.T.toLocaleString()});
+  const s=$("split"); s.max=cust-1; s.value=redN; s.style.setProperty("--p",(redN/cust*100)+"%");
+  const unit=lang==="zh"?"<small>人</small>":"";
+  $("rN").innerHTML=redN+unit; $("gN").innerHTML=(cust-redN)+unit;
+  $("rB").textContent=money(c.R); $("gB").textContent=money(c.G);
+  let h="";for(let i=0;i<cust;i++)h+=`<i class="${i<redN?"pr":"pg"}"></i>`;$("people").innerHTML=h;
+  const g=$("greed"); g.max=c.maxP; g.step=c.maxP>=1000?10:5; g.value=take;
+  $("mLbl").textContent=t("moods")[moodIdx(c.m)];
+  $("mTake").textContent=t("take",{p:take.toLocaleString(),m:(c.m*100).toFixed(1)});
+  setOdds("oR",fmt(c.oR)); setOdds("oG",fmt(c.oG));
+  $("eR").textContent=t("eg",{x:(c.oR*100).toFixed(0)}); $("eG").textContent=t("eg",{x:(c.oG*100).toFixed(0)});
+  const pool=c.T-take;
+  $("calc").innerHTML=`
+   <div class="cs"><div class="ct">${t("c1")}</div><div class="cf">${t("c1f")}</div>
+     <div class="cn ok">${money(c.T)} − ${money(take)} = <b>${money(pool)}</b></div><div class="cp">${t("c1p")}</div></div>
+   <div class="cs"><div class="ct">${t("c2")}</div><div class="cf">${t("c2f")}</div>
+     <div class="cn r"><span class="tag">${t("rS")}</span>${money(pool)} ÷ ${money(c.R)} = <b>${fmt(c.oR)}</b></div>
+     <div class="cn g"><span class="tag">${t("gS")}</span>${money(pool)} ÷ ${money(c.G)} = <b>${fmt(c.oG)}</b></div><div class="cp">${t("c2p")}</div></div>
+   <div class="cs"><div class="ct">${t("c3")}</div><div class="cf">${t("c3f")}</div>
+     <div class="cn r"><span class="tag">${t("ifR")}</span>${t("pay")} ${money(c.R)} × ${c.oR.toFixed(3)} ≈ ${money(pool)}<br>${t("hw")} ${money(c.T)} − ${money(pool)} = <b>${money(take)}</b></div>
+     <div class="cn g" style="margin-top:6px"><span class="tag">${t("ifG")}</span>${t("pay")} ${money(c.G)} × ${c.oG.toFixed(3)} ≈ ${money(pool)}<br>${t("hw")} ${money(c.T)} − ${money(pool)} = <b>${money(take)}</b></div>
+     <div class="cp">${t("c3p")}</div></div>`;
+  $("spin").textContent=t("spin",{r:round});
+  $("introBody").innerHTML=t("introHTML");
+  document.querySelectorAll(".lang button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
+}
+
+$("split").addEventListener("input",e=>{redN=+e.target.value;render();});
+$("greed").addEventListener("input",e=>{take=+e.target.value;render();});
+document.querySelectorAll(".lang button").forEach(b=>b.onclick=()=>{lang=b.dataset.l;document.documentElement.lang=lang==="zh"?"zh-Hant":"en";render();if(lastRes)showRes(lastRes,true);});
+$("start").onclick=()=>$("mIntro").classList.remove("show");
+
+let lastRes=null, coinTurns=0;
+$("spin").onclick=()=>{
+  const c=calc(), redWins=Math.random()<.5;
+  let d=0,kind="same";
+  if(c.m<=.05){d=Math.min(CAP-cust,Math.round(cust*.10));kind=d>0?"up":"same";}
+  else if(c.m>.10){d=Math.round(cust*Math.min(.9,(c.m-.10)*3));kind=d>0?"down":"same";}
+  bank+=take;
+  hist.push({r:round,c:cust,m:c.m,p:take});
+  lastRes={redWins,c,d,kind,take,last:round>=ROUNDS};
+  const coin=$("coin"); coinTurns+=5;
+  coin.style.transform=`rotateY(${coinTurns*360+(redWins?0:180)}deg)`;
+  $("resBody").classList.add("hide"); $("mRes").classList.add("show");
+  setTimeout(()=>{showRes(lastRes);chips(redWins);},2300);
+};
+function showRes(r){
+  const winTxt=t(r.redWins?"redW":"greenW"), other=t(r.redWins?"greenW":"redW");
+  const paid=r.redWins?r.c.R*r.c.oR:r.c.G*r.c.oG;
+  const react=r.kind==="up"?t("rUp",{d:r.d}):r.kind==="down"?t("rDown",{d:r.d}):t("rSame");
+  const newCust=cust+(r.kind==="up"?r.d:r.kind==="down"?-r.d:0);
+  const ended=r.last||newCust<2;
+  $("resBody").innerHTML=`
+    <div class="winner" style="color:${r.redWins?"#E0626B":"#5CC796"}">${t("wins",{c:winTxt})}</div>
+    <div class="ledger">
+      <div class="row"><span>${t("collect")}</span><span>${money(r.c.T)}</span></div>
+      <div class="row"><span>${t("paid")}</span><span>− ${money(paid)}</span></div>
+      <div class="row tot"><span>${t("profit")}</span><span>+ ${money(r.take)}</span></div>
+    </div>
+    <div class="callout">${t("same",{o:other,p:r.take.toLocaleString()})}</div>
+    <div class="react">${react}</div>
+    ${newCust<2&&!r.last?`<div class="react">${t("closed")}</div>`:""}
+    <button class="spin" id="nextBtn">${ended?t("final"):t("next")}</button>`;
+  $("resBody").classList.remove("hide");
+  $("nextBtn").onclick=()=>{
+    if(!r.applied){cust=Math.max(newCust,0);r.applied=true;}
+    $("mRes").classList.remove("show"); lastRes=null;
+    if(ended){finish();return;}
+    round++; redN=Math.max(1,Math.min(cust-1,Math.round(cust/2)));
+    render();
+  };
+}
+function finish(){
+  const avg=hist.reduce((a,h)=>a+h.m,0)/hist.length;
+  const T=I18N[lang].t;
+  let k = cust<30?"ghost": avg<.03?"saint": avg>.15?"shark": bank>=8000?"master":"solid";
+  const [b,n,d]=T[k];
+  const rows=hist.map(h=>`<tr><td>${h.r}</td><td>${h.c}</td><td>${(h.m*100).toFixed(1)}%</td><td>${money(h.p)}</td></tr>`).join("");
+  const H=t("hist");
+  $("finBody").innerHTML=`
+    <div class="medal">${b}${TXT}</div>
+    <div class="verdict">${n}</div><p>${d}</p>
+    <div class="ledger">
+      <div class="row"><span>${t("finBank")}</span><b style="color:#5CC796">${money(bank)}</b></div>
+      <div class="row"><span>${t("finCust")}</span><b>${cust}</b></div>
+      <div class="row"><span>${t("finAvg")}</span><b>${(avg*100).toFixed(1)}%</b></div>
+    </div>
+    <table class="hist"><tr><th>${H[0]}</th><th>${H[1]}</th><th>${H[2]}</th><th>${H[3]}</th></tr>${rows}</table>
+    <div class="callout">${t("lesson")}</div>
+    <button class="spin" id="again">${t("again")}</button>`;
+  $("mFin").classList.add("show");
+  $("again").onclick=()=>{round=1;cust=START;bank=0;hist=[];redN=50;take=500;$("mFin").classList.remove("show");render();};
+  chips(true);chips(false);
+}
+function chips(red){
+  const cols=red?["#B3262E","#D8BE8A","#1b2a22"]:["#2E9E6B","#D8BE8A","#1b2a22"];
+  for(let i=0;i<22;i++){const e=document.createElement("div");e.className="chip";
+    e.style.left=Math.random()*100+"vw";e.style.setProperty("--c",cols[i%3]);
+    e.style.animationDuration=(1.8+Math.random()*1.6)+"s";e.style.animationDelay=(Math.random()*.5)+"s";
+    document.body.appendChild(e);setTimeout(()=>e.remove(),4200);}
+}
+render();
+</script>
+</body>
+</html>
